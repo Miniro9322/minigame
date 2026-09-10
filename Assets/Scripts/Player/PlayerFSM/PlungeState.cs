@@ -1,34 +1,28 @@
 using UnityEngine;
 
-public class PlungeState : IState
+public class PlungeState : PlayerState
 {
     private static readonly int PlungeHash = Animator.StringToHash("Plunge");
     private static readonly int IdleHash = Animator.StringToHash("Idle");
-    private Player player;
 
-    public PlungeState(Player player)
-    {
-        this.player = player;
-    }
+    public PlungeState(Player player) : base(player) { }
 
-    public void Enter()
+    public override void Enter()
     {
         player.Animator.Play(PlungeHash);
         player.Rb.linearVelocity = new Vector2(player.Rb.linearVelocity.x, -player.Data.PlungeSpeed);
         player.downAttackZone.gameObject.SetActive(true);
     }
 
-    public void Exit()
+    public override void Exit()
     {
         player.Animator.Play(IdleHash);
         player.downAttackZone.gameObject.SetActive(false);
     }
 
-    public void FixedUpdate()
+    public override void FixedUpdate()
     {
         if (player.Grounded)
             player.Fsm.ChangeState(player.IdleState);
     }
-
-    public void Update() { }
 }

@@ -1,7 +1,4 @@
 using Cysharp.Threading.Tasks;
-using System;
-using System.Collections;
-using System.Threading;
 using UnityEngine;
 using UnityEngine.Pool;
 
@@ -37,8 +34,6 @@ public class DashAfterImage : MonoBehaviour
     [SerializeField] private int poolMaxSize = 64;
 
     private bool isSpawning = false;
-    private CancellationTokenSource cts;
-
     private IObjectPool<AfterImagePiece> piecePool;
 
     private void Awake()
@@ -80,55 +75,15 @@ public class DashAfterImage : MonoBehaviour
     public void StopAfterImage()
     {
         isSpawning = false;
-        if (cts != null)
-        {
-            cts.Cancel();
-            cts.Dispose();
-        }
     }
 
-    /// <summary>지정한 시간 동안만 잔상 재생 (가장 자주 쓰는 패턴)</summary>
-    async UniTask PlayAfterImage(float duration)
-    {
-        if (cts != null)
-        {
-            cts.Cancel();
-            cts.Dispose();
-        }
-        cts = new CancellationTokenSource();
-        _ = PlayForDuration(duration, cts.Token);
-    }
-
-    async UniTask SpawnLoop()
+    private async UniTask SpawnLoop()
     {
         while (isSpawning)
         {
             SpawnOne();
             await UniTask.Delay(spawnInterval);
         }
-    }
-
-    async UniTask PlayForDuration(float duration, CancellationToken cts)
-    {
-        try
-        {
-            isSpawning = true;
-            float t = 0f;
-            while (t < duration)
-            {
-                cts.ThrowIfCancellationRequested();
-
-                SpawnOne();
-                await UniTask.Delay(spawnInterval);
-                t += spawnInterval;
-            }
-            isSpawning = false;
-        }
-        catch (OperationCanceledException)
-        {
-            this.cts.Dispose();
-        }
-        
     }
 
     private void SpawnOne()

@@ -1,16 +1,12 @@
 using UnityEngine;
 
-public class JumpState : IState
+public class JumpState : PlayerState
 {
     private static readonly int JumpHash = Animator.StringToHash("Jump");
-    private Player player;
 
-    public JumpState(Player player)
-    {
-        this.player = player;
-    }
+    public JumpState(Player player) : base(player) { }
 
-    public void Enter()
+    public override void Enter()
     {
         player.Animator.SetBool(JumpHash, true);
         player.Animator.Play(JumpHash);
@@ -18,12 +14,12 @@ public class JumpState : IState
         player.Rb.linearVelocity = new Vector2(player.Rb.linearVelocity.x, player.Data.JumpPower);
     }
 
-    public void Exit()
+    public override void Exit()
     {
         player.Animator.SetBool(JumpHash, false);
     }
 
-    public void FixedUpdate()
+    public override void FixedUpdate()
     {
         if (!player.JumpHeld && player.Rb.linearVelocity.y > 0f)
         {
@@ -34,6 +30,4 @@ public class JumpState : IState
         if (player.Rb.linearVelocity.y <= 0f)
             player.Fsm.ChangeState(player.FallState);
     }
-
-    public void Update() { }
 }

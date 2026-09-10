@@ -1,26 +1,10 @@
-using UnityEngine;
-
-public class IdleState : IState
+public class IdleState : PlayerState
 {
-    private Player player;
+    public IdleState(Player player) : base(player) { }
 
-    public IdleState(Player player)
-    {
-        this.player = player;
-    }
-
-    public void Enter() { }
-
-    public void Exit() { }
-
-    public void FixedUpdate()
+    public override void FixedUpdate()
     {
         if (!player.Grounded && player.Rb.linearVelocity.y < 0f)
             player.Fsm.ChangeState(player.FallState);
-    }
-
-    public void Update()
-    {
-
     }
 }

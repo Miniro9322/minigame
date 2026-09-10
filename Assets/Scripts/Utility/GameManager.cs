@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -43,14 +42,9 @@ public class GameManager : MonoBehaviour
         rush.performed     -= OnRush;
     }
 
-    public void HitStop() => StartCoroutine(CoHit());
-
-    private IEnumerator CoHit()
-    {
-        Time.timeScale = 0.1f;
-        yield return new WaitForSeconds(0.1f);
-        Time.timeScale = 1f;
-    }
+    // 패링 성공 시 호출(SuccessParry UnityEvent). timeScale 0.1 로 약 1초(실시간) 정지 연출.
+    // 기존 코루틴이 WaitForSeconds(0.1) 을 느린 시간축에서 대기하던 동작을 그대로 유지.
+    public void HitStop() => _ = TimeControl.HitStop(0.1f, 1.0f);
 
     public void OnGameOver()
     {

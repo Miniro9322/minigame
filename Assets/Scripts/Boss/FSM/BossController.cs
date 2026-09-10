@@ -1,4 +1,4 @@
-using System.Collections;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 public abstract class BossController : MonoBehaviour, IDamageable
@@ -86,53 +86,37 @@ public abstract class BossController : MonoBehaviour, IDamageable
     public virtual void GetDamage(IDamageable.DamageInfo damageInfo)
     {
         CurrHp -= damageInfo.damage;
-        StartCoroutine(HitFlashCoroutine());
-        StartCoroutine(HitStopCoroutine());
+        _ = HitFlash();
+        _ = TimeControl.HitStop(0.05f, hitStopDuration);
     }
 
-    protected void TriggerDeathEffect()
-    {
-        StartCoroutine(DeathEffectCoroutine());
-    }
+    protected void TriggerDeathEffect() => _ = DeathEffect();
 
-    private IEnumerator HitFlashCoroutine()
+    private async UniTask HitFlash()
     {
-        if (!spriteRenderer) yield break;
+        if (!spriteRenderer) return;
         Color current = spriteRenderer.color;
         spriteRenderer.color = Color.white;
-        yield return new WaitForSecondsRealtime(hitFlashDuration);
+        await UniTask.Delay(Mathf.RoundToInt(hitFlashDuration * 1000), ignoreTimeScale: true);
         spriteRenderer.color = current;
     }
 
-    private IEnumerator HitStopCoroutine()
+    private async UniTask DeathEffect()
     {
-        Time.timeScale = 0.05f;
-        float elapsed = 0f;
-        while (elapsed < hitStopDuration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            yield return null;
-        }
-        Time.timeScale = 1f;
-    }
+        int token = TimeControl.Claim(0f);
+        await UniTask.Delay(Mathf.RoundToInt(deathStopDuration * 1000), ignoreTimeScale: true);
+        if (!TimeControl.IsOwner(token)) return;
 
-    private IEnumerator DeathEffectCoroutine()
-    {
-        // 완전 정지
-        Time.timeScale = 0f;
-        yield return new WaitForSecondsRealtime(deathStopDuration);
-
-        // 슬로우모션
-        Time.timeScale = deathSlowScale;
+        TimeControl.Set(token, deathSlowScale);
         if (deathParticle) deathParticle.Play();
 
         float elapsed = 0f;
         while (elapsed < deathSlowDuration)
         {
             elapsed += Time.unscaledDeltaTime;
-            yield return null;
+            await UniTask.Yield(PlayerLoopTiming.LastUpdate);
         }
 
-        Time.timeScale = 1f;
+        TimeControl.Release(token);
     }
 }

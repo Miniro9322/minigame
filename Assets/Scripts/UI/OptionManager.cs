@@ -48,17 +48,10 @@ public class OptionManager : MonoBehaviour
         EventSystem.current.SetSelectedGameObject(null);
     }
 
-    public void OnSFXChange(float value)
-    {
-        SoundManager.Instance.SetSFXVolume(value);
-        SaveManager.SetSFXVolume(value);
-    }
+    // SoundManager.SetSFXVolume / SetBGMVolume 이 내부적으로 SaveManager 저장까지 처리한다.
+    public void OnSFXChange(float value) => SoundManager.Instance.SetSFXVolume(value);
 
-    public void OnBGMChange(float value)
-    {
-        SoundManager.Instance.SetBGMVolume(value);
-        SaveManager.SetBGMVolume(value);
-    }
+    public void OnBGMChange(float value) => SoundManager.Instance.SetBGMVolume(value);
 
     public void OnClicked()
     {

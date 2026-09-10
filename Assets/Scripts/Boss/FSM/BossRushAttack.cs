@@ -1,23 +1,20 @@
 using UnityEngine;
 
-public class BossRushAttack : IState
+public class BossRushAttack : BossState
 {
     private static readonly int RushHash = Animator.StringToHash("Rush");
 
-    private Boss1 boss;
+    private readonly float rushAmount = 10f;
+    private readonly float rushDuration = 1f;
+
     private Vector3 startPoint;
-    private float rushAmount = 10f;
     private float rushTime = 0f;
-    private float rushDuration = 1f;
     private Vector3 rushVector;
     private float dir;
 
-    public BossRushAttack(Boss1 boss)
-    {
-        this.boss = boss;
-    }
+    public BossRushAttack(Boss1 boss) : base(boss) { }
 
-    public void Enter()
+    public override void Enter()
     {
         boss.Animator.Play(RushHash);
         boss.CanParry = true;
@@ -28,21 +25,17 @@ public class BossRushAttack : IState
         boss.DisableRush();
     }
 
-    public void Exit()
+    public override void Exit()
     {
         boss.IsAttack = false;
         rushTime = 0f;
         boss.DisableRush();
     }
 
-    public void FixedUpdate() { }
-
-    public void Update()
+    public override void Update()
     {
         if (boss.CurrHp <= 0f)
-        {
             boss.Fsm.ChangeState(boss.Death);
-        }
 
         if (!boss.CanRush) return;
 

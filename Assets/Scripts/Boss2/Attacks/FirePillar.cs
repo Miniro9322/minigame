@@ -1,7 +1,6 @@
-using System.Collections;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Pool;
-
 
 public class FirePillar : MonoBehaviour, IDamageable
 {
@@ -30,7 +29,7 @@ public class FirePillar : MonoBehaviour, IDamageable
         particle.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         particle.Play();
         SoundManager.Instance.PlaySFX(exploseAudio);
-        StartCoroutine(WaitParticle());
+        _ = WaitParticle();
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -43,9 +42,10 @@ public class FirePillar : MonoBehaviour, IDamageable
         }
     }
 
-    private IEnumerator WaitParticle()
+    private async UniTask WaitParticle()
     {
-        yield return new WaitUntil(() => !particle.IsAlive());
-        objectPool.Release(this);
+        await UniTask.WaitUntil(() => !particle.IsAlive());
+        if (gameObject.activeSelf)
+            objectPool.Release(this);
     }
 }

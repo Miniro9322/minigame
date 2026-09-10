@@ -1,25 +1,25 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class DodgeState : IState
+public class DodgeState : PlayerState
 {
     private static readonly int DodgeHash = Animator.StringToHash("Dodge");
-    private Player player;
-    private PlayerInput playerInput;
+
+    private readonly PlayerInput playerInput;
+    private readonly float dodgeAttackInterval = 0.2f;
+
     private float dodgeTime;
     private Vector3 dodgeEnd;
     private Vector3 dodgeStart;
-    private float dodgeAttackInterval = 0.2f;
     private bool dodgeAttacked = false;
     private bool completedNaturally = false;
 
-    public DodgeState(Player player)
+    public DodgeState(Player player) : base(player)
     {
-        this.player = player;
         playerInput = player.GetComponent<PlayerInput>();
     }
 
-    public void Enter()
+    public override void Enter()
     {
         player.Animator.Play(DodgeHash);
 
@@ -38,7 +38,7 @@ public class DodgeState : IState
         player.AfterImage.StartAfterImage();
     }
 
-    public void Exit()
+    public override void Exit()
     {
         if (completedNaturally)
             player.Rb.MovePosition(dodgeEnd);
@@ -55,7 +55,7 @@ public class DodgeState : IState
         dodgeAttacked = false;
     }
 
-    public void FixedUpdate()
+    public override void FixedUpdate()
     {
         if (dodgeTime > player.Data.DodgeDuration)
         {
@@ -69,7 +69,7 @@ public class DodgeState : IState
         player.Rb.MovePosition(Vector3.Lerp(dodgeStart, dodgeEnd, dodgeTime / player.Data.DodgeDuration));
     }
 
-    public void Update()
+    public override void Update()
     {
         if (!dodgeAttacked && dodgeTime < dodgeAttackInterval)
         {

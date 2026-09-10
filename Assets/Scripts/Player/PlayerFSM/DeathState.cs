@@ -1,47 +1,40 @@
-using System.Collections;
+using System;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class DeathState : IState
+public class DeathState : PlayerState
 {
     private static readonly int DieHash = Animator.StringToHash("Die");
-    private Player player;
 
-    public DeathState(Player player)
-    {
-        this.player = player;
-    }
+    public DeathState(Player player) : base(player) { }
 
-    public void Enter()
+    public override void Enter()
     {
         player.Animator.updateMode = AnimatorUpdateMode.UnscaledTime;
-        player.Animator.SetTrigger("Die");
+        player.Animator.SetTrigger(DieHash);
         InputSystem.actions.FindActionMap("Player").Disable();
         player.ToggleInvincible();
-        player.StartCoroutine(DeathSequence());
+        _ = DeathSequence();
     }
 
-    private IEnumerator DeathSequence()
+    private async UniTask DeathSequence()
     {
         // 히트스탑
-        Time.timeScale = 0f;
-        yield return new WaitForSecondsRealtime(0.3f);
+        int token = TimeControl.Claim(0f);
+        await UniTask.Delay(300, ignoreTimeScale: true);
 
         // 슬로우모션으로 사망 애니메이션 재생
-        Time.timeScale = 0.3f;
+        TimeControl.Set(token, 0.3f);
+        await UniTask.Yield(PlayerLoopTiming.LastUpdate);
 
-        yield return null;
-        var stateInfo = player.Animator.GetCurrentAnimatorStateInfo(0);
         // unscaled 기준으로 애니메이션 길이만큼 대기
-        yield return new WaitForSecondsRealtime(stateInfo.length);
+        float length = player.Animator.GetCurrentAnimatorStateInfo(0).length;
+        await UniTask.Delay(TimeSpan.FromSeconds(length), ignoreTimeScale: true);
 
-        Time.timeScale = 1f;
+        TimeControl.Release(token);
         player.Animator.updateMode = AnimatorUpdateMode.Normal;
 
         player.OnGameOver?.Invoke();
     }
-
-    public void Exit() { }
-    public void FixedUpdate() { }
-    public void Update() { }
 }

@@ -14,7 +14,7 @@ public class Player : MonoBehaviour, IDamageable
     public FSM Fsm { get; private set; }
     public DashAfterImage AfterImage { get; private set; }
     public Animator Animator { get; private set; }
-    public Queue<string> CommandQueue { get; private set; } = new();
+    public Queue<PlayerCommand> CommandQueue { get; private set; } = new();
     public IState AttackState { get; private set; }
     public IState DeathState { get; private set; }
     public IState DodgeState { get; private set; }
@@ -59,12 +59,14 @@ public class Player : MonoBehaviour, IDamageable
     private InputAction Pause;
     private InputAction Down;
 
+    // notGroundedFrames 가 이 값을 넘으면 낙하 상태로 전이 (착지 직후 1~2 프레임 튐 방지)
+    private const int FallStateGraceFrames = 2;
+
     private Vector2 move;
     private int currHp;
     private int jumpCount = 0;
     private bool invincible = false;
     private bool parrying = false;
-    private bool isQueueOpen = false;
     private float jumpBufferCounter = 0f;
     private float coyoteCounter = 0f;
     private float dodgeCool = 0f;
@@ -139,7 +141,7 @@ public class Player : MonoBehaviour, IDamageable
         if (!Grounded && newMove.y < -0.5f && move.y >= -0.5f)
         {
             CommandQueue.Clear();
-            CommandQueue.Enqueue("D");
+            CommandQueue.Enqueue(PlayerCommand.Down);
         }
 
         move = newMove;
@@ -178,7 +180,7 @@ public class Player : MonoBehaviour, IDamageable
             coyoteCounter = Data.CoyoteTime;
             notGroundedFrames = 0;
 
-            if (CommandQueue.Count > 0 && CommandQueue.Peek() == "D")
+            if (CommandQueue.Count > 0 && CommandQueue.Peek() == PlayerCommand.Down)
                 CommandQueue.Dequeue();
         }
         else
@@ -226,7 +228,7 @@ public class Player : MonoBehaviour, IDamageable
 
         if (!isAttacking
             && !isHit
-            && notGroundedFrames > 2
+            && notGroundedFrames > FallStateGraceFrames
             && Rb.linearVelocity.y < -0.01f
             && Fsm.CurrentState != FallState
             && Fsm.CurrentState != JumpState
@@ -261,8 +263,6 @@ public class Player : MonoBehaviour, IDamageable
 
     private void OnJump(InputAction.CallbackContext context)
     {
-        
-
         if (Fsm.CurrentState == HitState || Fsm.CurrentState == DodgeState) return;
 
         if (context.performed)
@@ -279,7 +279,7 @@ public class Player : MonoBehaviour, IDamageable
     {
         if (Fsm.CurrentState == HitState || Fsm.CurrentState == DodgeState) return;
 
-        if (!Grounded && CommandQueue.Count > 0 && CommandQueue.Peek() == "D" &&
+        if (!Grounded && CommandQueue.Count > 0 && CommandQueue.Peek() == PlayerCommand.Down &&
             (Fsm.CurrentState == JumpState || Fsm.CurrentState == FallState || Fsm.CurrentState == AttackState || Fsm.CurrentState == IdleState))
         {
             CommandQueue.Clear();
@@ -289,7 +289,7 @@ public class Player : MonoBehaviour, IDamageable
 
         if (Fsm.CurrentState == AttackState)
         {
-            if (CommandQueue.Count == 0) CommandQueue.Enqueue("A");
+            if (CommandQueue.Count == 0) CommandQueue.Enqueue(PlayerCommand.Attack);
             return;
         }
 
@@ -364,12 +364,12 @@ public class Player : MonoBehaviour, IDamageable
         GamePause?.Invoke();
     }
 
-    public void OpenInputQueue()
-    {
-        isQueueOpen = true;
-    }
+    // 애니메이션 이벤트용 스텁. 콤보 입력 윈도우 표시가 원래 의도였으나
+    // 현재 어떤 상태도 이 값을 참조하지 않아 게이팅은 비활성 상태다.
+    // (메서드 자체는 .anim 이벤트가 참조하므로 남겨둔다.)
+    public void OpenInputQueue() { }
 
-    public void CloseInputQueue() => isQueueOpen = false;
+    public void CloseInputQueue() { }
 
     public void ToggleInvincible() => invincible = !invincible;
 
@@ -403,8 +403,6 @@ public class Player : MonoBehaviour, IDamageable
 
     private void OnDown(InputAction.CallbackContext context)
     {
-        
-
         if (Fsm.CurrentState == HitState) return;
 
         if (context.performed)
@@ -413,7 +411,7 @@ public class Player : MonoBehaviour, IDamageable
             if (!Grounded)
             {
                 CommandQueue.Clear();
-                CommandQueue.Enqueue("D");
+                CommandQueue.Enqueue(PlayerCommand.Down);
             }
             // 지상이면 크라우칭 (대쉬 중엔 크라우칭 제외)
             else if (Grounded && Fsm.CurrentState != CrouchState && Fsm.CurrentState != DodgeState)

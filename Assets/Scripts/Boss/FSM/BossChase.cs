@@ -1,28 +1,22 @@
 using UnityEngine;
 
-public class BossChase : IState
+public class BossChase : BossState
 {
     private static readonly int MoveHash = Animator.StringToHash("Move");
-    private Boss1 boss;
 
-    public BossChase(Boss1 boss)
-    {
-        this.boss = boss;
-    }
+    public BossChase(Boss1 boss) : base(boss) { }
 
-    public void Enter()
+    public override void Enter()
     {
         boss.Animator.SetBool(MoveHash, true);
     }
 
-    public void Exit()
+    public override void Exit()
     {
         boss.Animator.SetBool(MoveHash, false);
     }
 
-    public void FixedUpdate() { }
-
-    public void Update()
+    public override void Update()
     {
         if (boss.CurrHp <= 0)
         {

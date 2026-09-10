@@ -1,28 +1,20 @@
-
-using UnityEngine;
-
 public class FSM
 {
     public IState CurrentState { get; private set; }
 
     public void ChangeState(IState newState)
     {
-        var c = CurrentState;
-        if(CurrentState == newState)
+        if (CurrentState == newState)
             return;
-        
+
         CurrentState?.Exit();
         CurrentState = newState;
         CurrentState?.Enter();
     }
 
-    public void Update()
-    {
-        CurrentState?.Update();
-    }
+    public bool IsInState<T>() where T : IState => CurrentState is T;
 
-    public void FixedUpdate()
-    {
-        CurrentState?.FixedUpdate();
-    }
+    public void Update() => CurrentState?.Update();
+
+    public void FixedUpdate() => CurrentState?.FixedUpdate();
 }

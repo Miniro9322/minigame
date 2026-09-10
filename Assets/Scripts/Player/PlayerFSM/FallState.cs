@@ -1,27 +1,23 @@
 using UnityEngine;
 
-public class FallState : IState
+public class FallState : PlayerState
 {
     private static readonly int FallHash = Animator.StringToHash("Fall");
-    private Player player;
 
-    public FallState(Player player)
-    {
-        this.player = player;
-    }
+    public FallState(Player player) : base(player) { }
 
-    public void Enter()
+    public override void Enter()
     {
         player.Animator.SetBool(FallHash, true);
         player.Animator.Play(FallHash);
     }
 
-    public void Exit()
+    public override void Exit()
     {
         player.Animator.SetBool(FallHash, false);
     }
 
-    public void FixedUpdate()
+    public override void FixedUpdate()
     {
         if (player.Rb.linearVelocity.y < 0f)
         {
@@ -35,6 +31,4 @@ public class FallState : IState
             player.Fsm.ChangeState(player.IdleState);
         }
     }
-
-    public void Update() { }
 }

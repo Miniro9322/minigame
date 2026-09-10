@@ -1,30 +1,24 @@
 using UnityEngine;
 
-public class BossIdle : IState
+public class BossIdle : BossState
 {
-    private Boss1 boss;
-    private float maxthinkTime = 2f;
+    private readonly float maxThinkTime = 2f;
     private float thinkTime;
     private float thinkDuration;
 
-    public BossIdle(Boss1 boss)
+    public BossIdle(Boss1 boss) : base(boss) { }
+
+    public override void Enter()
     {
-        this.boss = boss;
+        thinkDuration = Random.Range(1f, maxThinkTime);
     }
 
-    public void Enter()
-    {
-        thinkDuration = Random.Range(1f, maxthinkTime);
-    }
-
-    public void Exit()
+    public override void Exit()
     {
         thinkTime = 0f;
     }
 
-    public void FixedUpdate() { }
-
-    public void Update()
+    public override void Update()
     {
         if (boss.CurrHp <= 0)
         {

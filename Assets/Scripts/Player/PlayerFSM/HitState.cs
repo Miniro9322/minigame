@@ -1,22 +1,18 @@
 using UnityEngine;
 
-public class HitState : IState
+public class HitState : PlayerState
 {
     private static readonly int HitHash = Animator.StringToHash("Hit");
     private static readonly Color32 blinkColor = new(255, 180, 180, 255);
 
-    private Player player;
     private Color defaultColor;
     private float blinkTime;
     private float blinkDuration;
     private bool isBlinked;
 
-    public HitState(Player player)
-    {
-        this.player = player;
-    }
+    public HitState(Player player) : base(player) { }
 
-    public void Enter()
+    public override void Enter()
     {
         defaultColor = player.Sr.color;
 
@@ -42,16 +38,14 @@ public class HitState : IState
         );
     }
 
-    public void Exit()
+    public override void Exit()
     {
         player.Sr.color = defaultColor;
         player.ResetAttackEnd();
         player.ToggleInvincible();
     }
 
-    public void FixedUpdate() { }
-
-    public void Update()
+    public override void Update()
     {
         if (blinkTime > 0f)
         {

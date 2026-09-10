@@ -1,23 +1,14 @@
 using UnityEngine;
 
-public class BossDeath : IState
+public class BossDeath : BossState
 {
     private static readonly int DeathHash = Animator.StringToHash("Die");
 
-    private Boss1 boss;
+    public BossDeath(Boss1 boss) : base(boss) { }
 
-    public BossDeath(Boss1 boss)
-    {
-        this.boss = boss;
-    }
-
-    public void Enter()
+    public override void Enter()
     {
         boss.Animator.SetTrigger(DeathHash);
         boss.SetDeath();
     }
-
-    public void Exit() { }
-    public void FixedUpdate() { }
-    public void Update() { }
 }
