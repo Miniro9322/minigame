@@ -134,22 +134,6 @@ Unity의 공식 비주얼 비헤이비어 트리 툴(`com.unity.behavior`) 위�
 - **현지화**: Unity Localization 패키지로 보스 이름 등 텍스트를 다국어로 관리
 - **세이브**: `JsonUtility` 기반으로 볼륨/언어 설정을 `Application.persistentDataPath`에 저장
 
-## 폴더 구조
-
-```
-Assets/Scripts
-├── Boss/           # Boss1 — 커스텀 FSM 기반 보스
-│   └── FSM/
-├── Boss2/          # Boss2 — Behavior Graph 기반 보스
-│   ├── Actions/    # 비헤이비어 그래프 액션 노드
-│   ├── Attacks/    # 패턴별 투사체·이펙트 컴포넌트
-│   └── Composite/  # 커스텀 Composite 노드 (WeightedRandomSelector)
-├── Player/
-│   └── PlayerFSM/  # 플레이어 상태 머신
-├── UI/
-└── Utility/        # GameManager, SaveManager, SoundManager, FSM/IState 등 공용 코드
-```
-
 ## 향후 개선 방향
 
 - [ ] 보스 패턴 데이터를 ScriptableObject로 분리해 밸런싱 편의성 개선 및 보스 종류 추가
