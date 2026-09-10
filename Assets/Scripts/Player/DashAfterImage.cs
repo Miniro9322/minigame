@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.Pool;
 
 /// <summary>
 /// 대시 잔상 효과 컨트롤러
@@ -28,14 +29,44 @@ public class DashAfterImage : MonoBehaviour
     [Tooltip("잔상 정렬 순서 오프셋 (음수 = 원본 뒤로)")]
     [SerializeField] private int sortingOrderOffset = -1;
 
+    [Header("Pool Settings")]
+    [Tooltip("풀 기본 용량")]
+    [SerializeField] private int poolDefaultCapacity = 16;
+
+    [Tooltip("풀 최대 크기 (초과분은 반환 시 파괴)")]
+    [SerializeField] private int poolMaxSize = 64;
+
     private bool isSpawning = false;
     private CancellationTokenSource cts;
+
+    private IObjectPool<AfterImagePiece> piecePool;
 
     private void Awake()
     {
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
+
+        piecePool = new ObjectPool<AfterImagePiece>(
+            CreatePiece, OnGetPiece, OnReleasePiece, OnDestroyPiece,
+            true, poolDefaultCapacity, poolMaxSize);
     }
+
+    private void OnDestroy()
+    {
+        piecePool?.Clear();
+    }
+
+    private AfterImagePiece CreatePiece()
+    {
+        GameObject ghost = new GameObject("Afterimage");
+        AfterImagePiece piece = ghost.AddComponent<AfterImagePiece>();
+        piece.ObjectPool = piecePool;
+        return piece;
+    }
+
+    private void OnGetPiece(AfterImagePiece p) => p.gameObject.SetActive(true);
+    private void OnReleasePiece(AfterImagePiece p) => p.gameObject.SetActive(false);
+    private void OnDestroyPiece(AfterImagePiece p) { if (p != null) Destroy(p.gameObject); }
 
     /// <summary>대시 시작 — 멈추라고 할 때까지 계속 잔상 생성</summary>
     public void StartAfterImage()
@@ -104,22 +135,7 @@ public class DashAfterImage : MonoBehaviour
     {
         if (spriteRenderer == null || spriteRenderer.sprite == null) return;
 
-        GameObject ghost = new GameObject("Afterimage");
-        ghost.transform.SetPositionAndRotation(transform.position, transform.rotation);
-        ghost.transform.localScale = transform.lossyScale;
-
-        SpriteRenderer ghostSr = ghost.AddComponent<SpriteRenderer>();
-        ghostSr.sprite = spriteRenderer.sprite;
-        ghostSr.flipX = spriteRenderer.flipX;
-        ghostSr.flipY = spriteRenderer.flipY;
-        ghostSr.sortingLayerID = spriteRenderer.sortingLayerID;
-        ghostSr.sortingOrder = spriteRenderer.sortingOrder + sortingOrderOffset;
-
-        Color c = spriteRenderer.color;
-        c.a = startAlpha;
-        ghostSr.color = c;
-
-        AfterImagePiece piece = ghost.AddComponent<AfterImagePiece>();
-        piece.Init(fadeDuration);
+        AfterImagePiece piece = piecePool.Get();
+        piece.Play(spriteRenderer, startAlpha, fadeDuration, sortingOrderOffset);
     }
 }
