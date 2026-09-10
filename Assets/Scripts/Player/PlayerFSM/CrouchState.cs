@@ -20,8 +20,8 @@ public class CrouchState : PlayerState
 
     public override void FixedUpdate()
     {
-        // 지면에서 벗어나면 크라우칭 해제
-        if (!player.Grounded)
+        // 지면에서 벗어나 하강하기 시작하면 크라우칭 해제 후 낙하
+        if (player.ShouldFall)
             player.Fsm.ChangeState(player.FallState);
     }
 }

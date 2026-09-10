@@ -31,6 +31,15 @@ public class Player : MonoBehaviour, IDamageable
     public bool IsAttackEnd { get; private set; } = false;
     public Vector2 KnockbackDir { get; private set; }
 
+    /// <summary>
+    /// 낙하 상태로 전이해야 하는지 여부. 착지 직후 grace 프레임을 넘긴 뒤 하강 중일 때 true.
+    /// 지상에 설 수 있는 상태(Idle/Crouch/Parry)의 FixedUpdate 에서 이 값으로 FallState 로 전이한다.
+    /// </summary>
+    public bool ShouldFall =>
+        !Grounded
+        && Rb.linearVelocity.y < -0.01f
+        && notGroundedFrames > FallStateGraceFrames;
+
     public UnityEvent SuccessParry;
     public UnityEvent OnGameOver;
     public UnityEvent OnHit;
@@ -167,6 +176,10 @@ public class Player : MonoBehaviour, IDamageable
 
         Grounded = Physics2D.OverlapCircle(groundCheck.position, Data.GroundCheckRadius, groundLayer);
 
+        // 상태의 FixedUpdate 에서 player.ShouldFall 을 읽으므로 그 전에 갱신해 둔다
+        if (Grounded) notGroundedFrames = 0;
+        else          notGroundedFrames++;
+
         Fsm.FixedUpdate();
 
         if (Fsm.CurrentState == DodgeState || Fsm.CurrentState == DeathState)
@@ -178,14 +191,12 @@ public class Player : MonoBehaviour, IDamageable
         {
             jumpCount = 0;
             coyoteCounter = Data.CoyoteTime;
-            notGroundedFrames = 0;
 
             if (CommandQueue.Count > 0 && CommandQueue.Peek() == PlayerCommand.Down)
                 CommandQueue.Dequeue();
         }
         else
         {
-            notGroundedFrames++;
             if (coyoteCounter > 0f)
             {
                 coyoteCounter -= Time.fixedDeltaTime;
@@ -226,16 +237,7 @@ public class Player : MonoBehaviour, IDamageable
             }
         }
 
-        if (!isAttacking
-            && !isHit
-            && notGroundedFrames > FallStateGraceFrames
-            && Rb.linearVelocity.y < -0.01f
-            && Fsm.CurrentState != FallState
-            && Fsm.CurrentState != JumpState
-            && Fsm.CurrentState != PlungeState)
-        {
-            Fsm.ChangeState(FallState);
-        }
+        // 낙하 전이는 각 지상 상태(Idle/Crouch/Parry)의 FixedUpdate 에서 player.ShouldFall 로 처리한다.
     }
 
     public void Move(Vector2 move)
@@ -260,6 +262,13 @@ public class Player : MonoBehaviour, IDamageable
         float speedMultiplier = Fsm.CurrentState == CrouchState ? Data.CrouchSpeedMultiplier : 1f;
         transform.position += Data.MoveSpeed * speedMultiplier * Time.fixedDeltaTime * new Vector3(move.x, 0f);
     }
+
+    /// <summary>
+    /// 공격·패링 등이 끝났을 때 호출. 지상이면 Idle, 공중이면 Fall 로 전이한다.
+    /// (공중에서 행동이 끝났는데 Idle 로 가서 Move 애니메이션이 재생되는 "공중 걷기"를 방지)
+    /// </summary>
+    public void ChangeToNeutralState()
+        => Fsm.ChangeState(Grounded ? IdleState : FallState);
 
     private void OnJump(InputAction.CallbackContext context)
     {

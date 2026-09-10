@@ -28,13 +28,16 @@ public class AttackState : PlayerState
     public override void Update()
     {
         if (attackCount > player.Data.MaxAttackCount)
-            player.Fsm.ChangeState(player.IdleState);
+        {
+            player.ChangeToNeutralState();
+            return;
+        }
 
         if (player.IsAttackEnd)
         {
             if (player.CommandQueue.Count == 0)
             {
-                player.Fsm.ChangeState(player.IdleState);
+                player.ChangeToNeutralState();
                 return;
             }
 

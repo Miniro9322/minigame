@@ -20,11 +20,18 @@ public class ParryState : PlayerState
         player.ToggleParry();
     }
 
+    public override void FixedUpdate()
+    {
+        // 공중에서 패링한 경우 하강 시작하면 낙하로 전이
+        if (player.ShouldFall)
+            player.Fsm.ChangeState(player.FallState);
+    }
+
     public override void Update()
     {
         parryTime += Time.deltaTime;
 
         if (parryTime > player.Data.ParryInterval)
-            player.Fsm.ChangeState(player.IdleState);
+            player.ChangeToNeutralState();
     }
 }

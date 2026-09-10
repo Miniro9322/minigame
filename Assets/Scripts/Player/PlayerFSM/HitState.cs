@@ -66,6 +66,7 @@ public class HitState : PlayerState
         {
             player.Sr.color = defaultColor;
 
+            // 피격 넉백은 위로 뜰 수 있어 Jump/Fall 을 속도로 구분 (일반 종료와 다름)
             if (!player.Grounded)
             {
                 if (player.Rb.linearVelocity.y > 0f)

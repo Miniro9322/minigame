@@ -4,7 +4,7 @@ public class IdleState : PlayerState
 
     public override void FixedUpdate()
     {
-        if (!player.Grounded && player.Rb.linearVelocity.y < 0f)
+        if (player.ShouldFall)
             player.Fsm.ChangeState(player.FallState);
     }
 }
