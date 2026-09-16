@@ -22,10 +22,10 @@ public class DeathState : PlayerState
     {
         // 히트스탑
         int token = TimeControl.Claim(0f);
-        await UniTask.Delay(300, ignoreTimeScale: true);
+        await UniTask.Delay(TimeSpan.FromSeconds(player.Data.DeathStopDuration), ignoreTimeScale: true);
 
         // 슬로우모션으로 사망 애니메이션 재생
-        TimeControl.Set(token, 0.3f);
+        TimeControl.Set(token, player.Data.DeathSlowScale);
         await UniTask.Yield(PlayerLoopTiming.LastUpdate);
 
         // unscaled 기준으로 애니메이션 길이만큼 대기

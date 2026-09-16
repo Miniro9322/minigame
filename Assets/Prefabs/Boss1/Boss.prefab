@@ -51,7 +51,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &4909672065160890177
 Transform:
   m_ObjectHideFlags: 0
@@ -194,7 +194,6 @@ MonoBehaviour:
   lookAtZone: {fileID: 1416117969047230266}
   data: {fileID: 11400000, guid: ca49e948808c28b4a859dd67d6f23a88, type: 2}
   attackZone: {fileID: 739632506711744980}
-  spriteRenderer: {fileID: 0}
   hitFlashDuration: 0.08
   hitStopDuration: 0.04
   deathStopDuration: 0.3
@@ -206,9 +205,16 @@ MonoBehaviour:
   periodicInterval: 5
   weightAttack1: 60
   weightRush: 40
+  weightIncrement: 10
   stunInterval: 3
   warning: {fileID: 7656686143244059653}
+  warning2: {fileID: 0}
   transitionWall: {fileID: 0}
+  walkSound: {fileID: 0}
+  attack1Sound: {fileID: 0}
+  attack2Sound: {fileID: 0}
+  rushSound: {fileID: 0}
+  hitSound: {fileID: 0}
 --- !u!70 &5691118610067623508
 CapsuleCollider2D:
   m_ObjectHideFlags: 0

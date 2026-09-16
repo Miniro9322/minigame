@@ -20,6 +20,9 @@ public abstract class BossController : MonoBehaviour, IDamageable
 
     [Header("── 피격 효과 ──")]
     [SerializeField] private float hitFlashDuration = 0.08f;
+    [Tooltip("피격 순간 낮출 timeScale 값 (0 에 가까울수록 강하게 멈춘다)")]
+    [SerializeField] private float hitStopScale = 0.05f;
+    [Tooltip("히트스탑 지속 시간. unscaled 기준")]
     [SerializeField] private float hitStopDuration = 0.04f;
 
     [Header("── 사망 연출 ──")]
@@ -87,7 +90,7 @@ public abstract class BossController : MonoBehaviour, IDamageable
     {
         CurrHp -= damageInfo.damage;
         _ = HitFlash();
-        _ = TimeControl.HitStop(0.05f, hitStopDuration);
+        _ = TimeControl.HitStop(hitStopScale, hitStopDuration);
     }
 
     protected void TriggerDeathEffect() => _ = DeathEffect();

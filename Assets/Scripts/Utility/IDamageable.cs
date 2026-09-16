@@ -6,8 +6,8 @@ public interface IDamageable
     {
         public int damage;
         public bool canParry;
-        public bool ignoreInvincible; // true면 무적 무시
-        public Vector2 knockbackDir;  // 공격자 → 피격자 방향 (zero 이면 HitState에서 자동 계산)
+        public bool ignoreInvincible;
+        public Vector2 knockbackDir; 
     }
 
     DamageInfo SetDamage();

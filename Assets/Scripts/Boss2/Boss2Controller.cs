@@ -1,25 +1,16 @@
 using Cysharp.Threading.Tasks;
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using Unity.Behavior;
 using UnityEngine;
 using UnityEngine.Events;
-using UnityEngine.Pool;
 
 [RequireComponent(typeof(BehaviorGraphAgent))]
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(SpriteRenderer))]
 public class Boss2Controller : MonoBehaviour, IDamageable
 {
-    private static readonly int ActingHash       = Animator.StringToHash("Acting");
-    private static readonly int LaserHash        = Animator.StringToHash("Laser");
-    private static readonly int BigAttackHash    = Animator.StringToHash("BigAttack");
-    private static readonly int FireBallHash     = Animator.StringToHash("FireBall");
-    private static readonly int SpreadFireBallHash = Animator.StringToHash("SpreadFireBall");
-    private static readonly int FireWallHash     = Animator.StringToHash("FireWall");
-    private static readonly int DeathHash        = Animator.StringToHash("Death");
-    private static readonly int StunHash         = Animator.StringToHash("Stun");
+    private static readonly int DeathHash = Animator.StringToHash("Death");
 
     [Header("── 스폰 ──")]
     [Tooltip("시작 층 (0=평지, 1=1층, 2=2층, 3=3층)")]
@@ -84,6 +75,9 @@ public class Boss2Controller : MonoBehaviour, IDamageable
 
     [Header("── 피격 효과 ──")]
     [SerializeField] private int hitFlashDuration = 80;
+    [Tooltip("피격 순간 낮출 timeScale 값 (0 에 가까울수록 강하게 멈춘다)")]
+    [SerializeField] private float hitStopScale    = 0.05f;
+    [Tooltip("히트스탑 지속 시간. unscaled 기준")]
     [SerializeField] private float hitStopDuration  = 0.04f;
 
     [Header("── 사망 연출 ──")]
@@ -93,8 +87,8 @@ public class Boss2Controller : MonoBehaviour, IDamageable
 
     public UnityEvent OnBossDead;
 
-    public bool  IsActing  { get; private set; } = false;
-    public bool  IsGroggy  { get; private set; } = false;
+    public bool  IsActing  { get; internal set; } = false;
+    public bool  IsGroggy  { get; internal set; } = false;
     public float CurrentHP { get; private set; }
     public float MaxHP     => maxHP;
     public BossData Data   => data;
@@ -104,16 +98,7 @@ public class Boss2Controller : MonoBehaviour, IDamageable
 
     private BehaviorGraphAgent behaviorAgent;
     private bool phase2Triggered = false;
-    private int  currentFloor    = 0;
-    private int  currentSide     = 1;
-    private Vector3[,] teleportPositions;
 
-    private int  groggyPartsTotal     = 0;
-    private int  groggyPartsDestroyed = 0;
-    private List<GroggyPart>  spawnedGroggyParts = new();
-    private List<GameObject> activePoolObjects = new();
-
-    private bool fireSignalReceived = false;
     private GameObject player;
     private Animator animator;
 
@@ -129,33 +114,10 @@ public class Boss2Controller : MonoBehaviour, IDamageable
     public Transform LookAtZone => lookAtZone;
     private int maxHP;
 
-    private IObjectPool<BossBullet>          bulletPool;
-    private IObjectPool<FirePillar>          PillarPool;
-    private IObjectPool<GameObject>          PillarWarningPool;
-    private IObjectPool<FloorLaser>          LaserPool;
-    private IObjectPool<GroggyPart>          PartPool;
-    private IObjectPool<ParriableProjectile> ParryPool;
-
-    /// <summary>프리팹에서 컴포넌트 T 를 뽑아내는 오브젝트 풀 생성. onCreate 로 풀 역참조 등을 주입한다.</summary>
-    private ObjectPool<T> MakeComponentPool<T>(GameObject prefab, Action<T, IObjectPool<T>> onCreate = null)
-        where T : Component
-    {
-        ObjectPool<T> pool = null;
-        pool = new ObjectPool<T>(
-            createFunc:      () => { var o = Instantiate(prefab).GetComponent<T>(); onCreate?.Invoke(o, pool); return o; },
-            actionOnGet:     p => p.gameObject.SetActive(true),
-            actionOnRelease: p => { p.gameObject.SetActive(false); activePoolObjects.Remove(p.gameObject); },
-            actionOnDestroy: p => { if (p) Destroy(p.gameObject); });
-        return pool;
-    }
-
-    private ObjectPool<GameObject> MakeGameObjectPool(GameObject prefab)
-        => new(
-            createFunc:      () => Instantiate(prefab),
-            actionOnGet:     p => p.SetActive(true),
-            actionOnRelease: p => { p.SetActive(false); activePoolObjects.Remove(p); },
-            actionOnDestroy: p => { if (p) Destroy(p); });
-
+    private Boss2PoolManager pools;
+    private Boss2TeleportController teleport;
+    private Boss2AttackPatterns attacks;
+    private Boss2VisualEffects effects;
 
     private void Awake()
     {
@@ -167,14 +129,31 @@ public class Boss2Controller : MonoBehaviour, IDamageable
         animator       = GetComponent<Animator>();
         parryWarning.SetActive(false);
         avoidWarning.SetActive(false);
-        SetupTeleportPositions();
 
-        bulletPool        = MakeComponentPool<BossBullet>         (bulletPrefab);
-        PillarPool        = MakeComponentPool<FirePillar>          (firePillarExplosionPrefab, (o, p) => o.ObjectPool = p);
-        PillarWarningPool = MakeGameObjectPool                     (firePillarWarningPrefab);
-        LaserPool         = MakeComponentPool<FloorLaser>          (laserPrefab,               (o, p) => o.ObjectPool = p);
-        PartPool          = MakeComponentPool<GroggyPart>          (groggyPartPrefab,          (o, p) => o.ObjectPool = p);
-        ParryPool         = MakeComponentPool<ParriableProjectile> (parriableProjectilePrefab, (o, p) => o.ObjectPool = p);
+        pools = new Boss2PoolManager(
+            bulletPrefab, firePillarExplosionPrefab, firePillarWarningPrefab,
+            laserPrefab, groggyPartPrefab, parriableProjectilePrefab);
+
+        teleport = new Boss2TeleportController(
+            transform, spriteRenderer, teleportDuration,
+            floorLeftPositions, floorCenterPositions, floorRightPositions,
+            initialFloor: 0, initialSide: 1);
+
+        attacks = new Boss2AttackPatterns(
+            this, pools, teleport, transform, animator, player ? player.transform : null, data,
+            postAttackDelay, parryWindowDelay,
+            new ParryProjectileConfig(parriableProjectilePrefab, projectileCount, projectileSpeed, projectileInterval),
+            new FirePillarConfig(firePillarWarningPrefab, firePillarExplosionPrefab, firePillarCount,
+                firePillarWarningDuration, firePillarGroundY, firePillarRangeXMin, firePillarRangeXMax),
+            new BulletCurtainConfig(bulletPrefab, bulletCurtainCount, bulletSpeed, bulletLifetime),
+            new FloorLaserConfig(laserPrefab, floorLaserLeftPositions, floorLaserRightPositions,
+                laserWarningDuration, laserActiveDuration),
+            new GroggyPatternConfig(groggyPartPrefab, groggyPartSpawnPoints, groggyCenterPosition,
+                groggyTimeLimit, groggyDuration, groggyHPRecoveryAmount, ChargeClip));
+
+        effects = new Boss2VisualEffects(
+            spriteRenderer, phase2Color, () => IsPhase2,
+            hitFlashDuration, deathStopDuration, deathSlowScale, deathSlowDuration);
     }
 
     private void Start()
@@ -182,12 +161,11 @@ public class Boss2Controller : MonoBehaviour, IDamageable
         int floor = Mathf.Clamp(spawnFloor, 0, 3);
         int side  = randomSpawn ? UnityEngine.Random.Range(0, 3) : Mathf.Clamp(spawnSide, 0, 2);
 
-        Vector3 spawnPos = teleportPositions[floor, side];
+        Vector3 spawnPos = teleport.GetPosition(floor, side);
         if (spawnPos != Vector3.zero)
         {
             transform.position = spawnPos;
-            currentFloor = floor;
-            currentSide  = side;
+            teleport.SetCurrentPosition(floor, side);
         }
     }
 
@@ -225,8 +203,8 @@ public class Boss2Controller : MonoBehaviour, IDamageable
 
         if (!IsDead)
         {
-            _ = HitFlash();
-            _ = TimeControl.HitStop(0.05f, hitStopDuration);
+            _ = effects.HitFlash();
+            _ = TimeControl.HitStop(hitStopScale, hitStopDuration);
         }
         else
         {
@@ -235,7 +213,7 @@ public class Boss2Controller : MonoBehaviour, IDamageable
             // 실행 중인 액션을 곧바로 중단하지 않으므로 여기서 직접 정지)
             SoundManager.Instance.StopSFXLoop();
             if (spriteRenderer) spriteRenderer.enabled = true;
-            _ = DeathEffect();
+            _ = effects.PlayDeathEffect(OnDeath);
         }
     }
 
@@ -250,7 +228,8 @@ public class Boss2Controller : MonoBehaviour, IDamageable
     private void OnDeath()
     {
         behaviorAgent.BlackboardReference.SetVariableValue("IsDead", true);
-        DestroyAllSpawnedObjects();
+        pools.DestroyAllActive();
+        attacks.ClearSpawnedGroggyParts();
         animator.Play(DeathHash);
         _ = WaitForDeathAnimation();
     }
@@ -268,447 +247,24 @@ public class Boss2Controller : MonoBehaviour, IDamageable
         Destroy(gameObject);
     }
 
-    private void DestroyAllSpawnedObjects()
-    {
-        foreach (var obj in activePoolObjects)
-            if (obj != null) Destroy(obj);
-        activePoolObjects.Clear();
+    public UniTask AttackParriableProjectile(Action<bool> callback, CancellationTokenSource cts)
+        => attacks.AttackParriableProjectile(callback, cts);
 
-        foreach (var part in spawnedGroggyParts)
-            if (part != null) Destroy(part.gameObject);
-        spawnedGroggyParts.Clear();
+    public UniTask AttackFirePillar(Action<bool> callback, CancellationTokenSource cts)
+        => attacks.AttackFirePillar(callback, cts);
 
-        bulletPool?.Clear();
-        PillarPool?.Clear();
-        PillarWarningPool?.Clear();
-        LaserPool?.Clear();
-        PartPool?.Clear();
-        ParryPool?.Clear();
-    }
+    public UniTask AttackBulletCurtain(Action<bool> callback, CancellationTokenSource cts)
+        => attacks.AttackBulletCurtain(callback, cts);
 
-    private void SetupTeleportPositions()
-    {
-        int floorCount = 4;
-        teleportPositions = new Vector3[floorCount, 3];
+    public UniTask AttackFloorLaser(Action<bool> callback, CancellationTokenSource cts)
+        => attacks.AttackFloorLaser(callback, cts);
 
-        for (int i = 0; i < floorCount; i++)
-        {
-            if (i < floorLeftPositions.Length   && floorLeftPositions[i])
-                teleportPositions[i, 0] = floorLeftPositions[i].position;
-            if (i < floorCenterPositions.Length && floorCenterPositions[i])
-                teleportPositions[i, 1] = floorCenterPositions[i].position;
-            if (i < floorRightPositions.Length  && floorRightPositions[i])
-                teleportPositions[i, 2] = floorRightPositions[i].position;
-        }
-    }
+    public UniTask AttackGroggyPattern(Action<bool> callback, CancellationTokenSource cts)
+        => attacks.AttackGroggyPattern(callback, cts);
 
-    async UniTask DoTeleport(Vector3 target)
-    {
-        if (spriteRenderer) spriteRenderer.enabled = false;
-        await UniTask.Delay(teleportDuration / 2);
-        transform.position = target;
-        await UniTask.Delay(teleportDuration / 2);
-        if (spriteRenderer) spriteRenderer.enabled = true;
-    }
+    public void OnFireSignal() => attacks.OnFireSignal();
 
-    async UniTask TeleportToRandomPosition()
-    {
-        var candidates = new List<(int floor, int side)>();
-        for (int f = 0; f < 4; f++)
-            for (int s = 0; s < 3; s++)
-                if (teleportPositions[f, s] != Vector3.zero)
-                    candidates.Add((f, s));
-
-        candidates.RemoveAll(c => c.floor == currentFloor && c.side == currentSide);
-        if (candidates.Count == 0) return;
-
-        var pick = candidates[UnityEngine.Random.Range(0, candidates.Count)];
-        await DoTeleport(teleportPositions[pick.floor, pick.side]);
-        currentFloor = pick.floor;
-        currentSide = pick.side;
-    }
-
-    public async UniTask AttackParriableProjectile(Action<bool> callback, CancellationTokenSource cts)
-    {
-        try
-        {
-            IsActing = true;
-            var playerTf = player?.transform;
-
-            fireSignalReceived = false;
-
-            animator.Play(FireBallHash);
-            
-            await UniTask.WaitUntil(() => fireSignalReceived);
-
-            cts.Token.ThrowIfCancellationRequested();
-
-            for (int i = 0; i < projectileCount; i++)
-            {
-                cts.Token.ThrowIfCancellationRequested();
-
-                if (parriableProjectilePrefab && playerTf)
-                {
-                    Vector3 dir = (playerTf.position - transform.position).normalized;
-                    float spread = UnityEngine.Random.Range(-10f, 10f) * Mathf.Deg2Rad;
-                    Vector2 fd = new Vector2(
-                        dir.x * Mathf.Cos(spread) - dir.y * Mathf.Sin(spread),
-                        dir.x * Mathf.Sin(spread) + dir.y * Mathf.Cos(spread)).normalized;
-
-                    var go = ParryPool.Get();
-                    go.transform.position = transform.position;
-                    activePoolObjects.Add(go.gameObject);
-
-                    if (go.TryGetComponent<Rigidbody2D>(out var rb)) rb.linearVelocity = fd * projectileSpeed;
-                    go.Initialize(this, data.atk);
-
-                    int returnDelay = projectileInterval * (projectileCount - i) + parryWindowDelay + 1000;
-                    _ = ReturnParry(go, returnDelay);
-                }
-                await UniTask.Delay(projectileInterval);
-            }
-
-            await UniTask.Delay(300 + parryWindowDelay);
-            cts.Token.ThrowIfCancellationRequested();
-            await TeleportToRandomPosition();
-            cts.Token.ThrowIfCancellationRequested();
-            await UniTask.Delay(postAttackDelay);
-            cts.Token.ThrowIfCancellationRequested();
-
-            IsActing = false;
-            callback?.Invoke(true);
-        }
-        catch (OperationCanceledException)
-        {
-            // 취소 시 IsActing 이 true 로 남으면 이후 모든 패턴이 Failure 가 되므로 반드시 해제
-            IsActing = false;
-            if (animator) animator.SetBool(ActingHash, false);
-        }
-    }
-
-    async UniTask ReturnParry(ParriableProjectile go, int delay)
-    {
-        await UniTask.Delay(delay);
-        if (go != null && go.gameObject.activeSelf)
-            ParryPool.Release(go);
-    }
-
-    public async UniTask AttackFirePillar(Action<bool> callback, CancellationTokenSource cts)
-    {
-        try
-        {
-            IsActing = true;
-
-            fireSignalReceived = false;
-            animator.Play(FireWallHash);
-            await UniTask.WaitUntil(() => fireSignalReceived);
-            cts.Token.ThrowIfCancellationRequested();
-
-            if (firePillarWarningPrefab)
-            {
-                for (int i = 0; i < firePillarCount; i++)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
-                    Vector3 spawnPos = new Vector3(
-                        UnityEngine.Random.Range(firePillarRangeXMin, firePillarRangeXMax),
-                        firePillarGroundY, 0f);
-
-                    var warning = PillarWarningPool.Get();
-                    warning.transform.position = spawnPos;
-                    activePoolObjects.Add(warning);
-                    _ = FirePillarExplode(spawnPos, warning, firePillarWarningDuration);
-                }
-                await UniTask.Delay(firePillarWarningDuration + 500);
-                cts.Token.ThrowIfCancellationRequested();
-            }
-            else
-            {
-                await UniTask.Delay(2000);
-                cts.Token.ThrowIfCancellationRequested();
-            }
-
-            _ = TeleportToRandomPosition();
-            await UniTask.Delay(postAttackDelay);
-            cts.Token.ThrowIfCancellationRequested();
-            IsActing = false;
-            callback?.Invoke(true);
-        }
-        catch (OperationCanceledException)
-        {
-            // 취소 시 IsActing 이 true 로 남으면 이후 모든 패턴이 Failure 가 되므로 반드시 해제
-            IsActing = false;
-            if (animator) animator.SetBool(ActingHash, false);
-        }
-    }
-
-    async UniTask FirePillarExplode(Vector3 pos, GameObject warning, int delay)
-    {
-        await UniTask.Delay(delay);
-        PillarWarningPool.Release(warning);
-
-        if (firePillarExplosionPrefab)
-        {
-            var explosion = PillarPool.Get();
-            explosion.transform.position = pos;
-            activePoolObjects.Add(explosion.gameObject);
-            explosion.Init(data.atk);
-            explosion.Setup();
-        }
-    }
-
-    public async UniTask AttackBulletCurtain(Action<bool> callback, CancellationTokenSource cts)
-    {
-        try
-        {
-            IsActing = true;
-
-            fireSignalReceived = false;
-            animator.Play(SpreadFireBallHash);
-            await UniTask.WaitUntil(() => fireSignalReceived);
-            cts.Token.ThrowIfCancellationRequested();
-
-            if (bulletPrefab)
-            {
-                float step = 360f / bulletCurtainCount;
-                for (int i = 0; i < bulletCurtainCount; i++)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
-                    float angle = i * step * Mathf.Deg2Rad;
-                    Vector3 dir = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-
-                    var bullet = bulletPool.Get();
-                    bullet.transform.position = transform.position;
-                    activePoolObjects.Add(bullet.gameObject);
-
-                    if (bullet.TryGetComponent<Rigidbody2D>(out var rb)) rb.linearVelocity = dir * bulletSpeed;
-                    bullet.Init(data.atk);
-
-                    _ = ReturnBullet(bullet, bulletLifetime);
-                }
-            }
-
-            await UniTask.Delay(1000);
-            cts.Token.ThrowIfCancellationRequested();
-            await TeleportToRandomPosition();
-            cts.Token.ThrowIfCancellationRequested();
-            await UniTask.Delay(postAttackDelay);
-            cts.Token.ThrowIfCancellationRequested();
-            IsActing = false;
-            callback?.Invoke(true);
-        }
-        catch (OperationCanceledException)
-        {
-            // 취소 시 IsActing 이 true 로 남으면 이후 모든 패턴이 Failure 가 되므로 반드시 해제
-            IsActing = false;
-            if (animator) animator.SetBool(ActingHash, false);
-        }
-    }
-
-    async UniTask ReturnBullet(BossBullet bullet, int lifetime)
-    {
-        await UniTask.Delay(lifetime);
-        if (bullet != null && bullet.gameObject.activeSelf)
-            bulletPool.Release(bullet);
-    }
-
-    public async UniTask AttackFloorLaser(Action<bool> callback, CancellationTokenSource cts)
-    {
-        try
-        {
-            IsActing = true;
-
-            bool bossOnLeft = transform.position.x <= 0f;
-            Transform[] spawnPoints = bossOnLeft ? floorLaserLeftPositions : floorLaserRightPositions;
-
-            animator.SetBool(ActingHash, IsActing);
-            animator.Play(LaserHash);
-
-            if (laserPrefab && spawnPoints is { Length: > 0 })
-            {
-                int[] order = ShuffledOrder(spawnPoints.Length);
-                var lasers = new FloorLaser[spawnPoints.Length];
-
-                for (int i = 0; i < order.Length; i++)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
-                    int idx = order[i];
-                    if (!spawnPoints[idx]) continue;
-
-                    float halfLen = laserPrefab.transform.localScale.x * 0.4f;
-                    float offsetX = bossOnLeft ? halfLen : -halfLen;
-                    Vector3 spawnPos = new(spawnPoints[idx].position.x + offsetX,
-                                           spawnPoints[idx].position.y, 0f);
-
-                    var go = LaserPool.Get();
-                    go.transform.position = spawnPos;
-                    activePoolObjects.Add(go.gameObject);
-                    go.Init(data.atk);
-                    go.StartWarning();
-                    lasers[i] = go;
-
-                    await UniTask.Delay(500);
-                }
-
-                await UniTask.Delay(laserWarningDuration);
-                cts.Token.ThrowIfCancellationRequested();
-
-                foreach (var laser in lasers)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
-                    if (laser == null) continue;
-                    laser.Activate(laserActiveDuration);
-                    await UniTask.Delay(laserActiveDuration + 200);
-                }
-            }
-            else
-            {
-                await UniTask.Delay(3000);
-                cts.Token.ThrowIfCancellationRequested();
-            }
-
-            IsActing = false;
-            animator.SetBool(ActingHash, IsActing);
-            _ = TeleportToRandomPosition();
-            await UniTask.Delay(postAttackDelay);
-            cts.Token.ThrowIfCancellationRequested();
-            callback?.Invoke(true);
-        }
-        catch (OperationCanceledException)
-        {
-            // 취소 시 IsActing 이 true 로 남으면 이후 모든 패턴이 Failure 가 되므로 반드시 해제
-            IsActing = false;
-            if (animator) animator.SetBool(ActingHash, false);
-        }
-    }
-
-    public async UniTask AttackGroggyPattern(Action<bool> callback, CancellationTokenSource cts)
-    {
-        try
-        {
-            IsActing = true;
-            animator.SetBool(ActingHash, IsActing);
-
-            if (groggyCenterPosition != null)
-                _ = DoTeleport(groggyCenterPosition.position);
-
-            animator.Play(BigAttackHash);
-
-            groggyPartsTotal = groggyPartSpawnPoints?.Length ?? 0;
-            groggyPartsDestroyed = 0;
-            spawnedGroggyParts.Clear();
-
-            if (groggyPartPrefab && groggyPartSpawnPoints is { Length: > 0 })
-            {
-                foreach (var pt in groggyPartSpawnPoints)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
-
-                    if (!pt) continue;
-                    var part = PartPool.Get();
-                    part.transform.position = pt.position;
-                    activePoolObjects.Add(part.gameObject);
-                    spawnedGroggyParts.Add(part);
-                    part.Initialize(this);
-                }
-            }
-
-            float timer = 0f;
-            SoundManager.Instance.PlaySFXLoop(ChargeClip);
-            try
-            {
-                while (timer < groggyTimeLimit && groggyPartsDestroyed < groggyPartsTotal && !IsDead)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
-                    timer += Time.deltaTime;
-                    await UniTask.Yield(PlayerLoopTiming.LastUpdate);
-                }
-            }
-            finally
-            {
-                // 취소/사망 시에도 차지 루프 사운드가 무한 재생되지 않도록 보장
-                SoundManager.Instance.StopSFXLoop();
-            }
-
-            // 그로기 도중 보스가 죽으면 스턴/회복(HealHP 로 되살아나는 문제)/텔레포트 전부 스킵
-            if (IsDead) return;
-
-            if (groggyPartsDestroyed >= groggyPartsTotal)
-            {
-                IsGroggy = true;
-                animator.SetBool(StunHash, IsGroggy);
-                animator.Play(StunHash);
-                await UniTask.Delay(groggyDuration);
-                cts.Token.ThrowIfCancellationRequested();
-                IsGroggy = false;
-                animator.SetBool(StunHash, IsGroggy);
-            }
-            else
-            {
-                cts.Token.ThrowIfCancellationRequested();
-                foreach (var part in spawnedGroggyParts)
-                    if (part != null && part.gameObject.activeSelf) PartPool.Release(part);
-                spawnedGroggyParts.Clear();
-                HealHP(groggyHPRecoveryAmount);
-            }
-
-            IsActing = false;
-            animator.SetBool(ActingHash, IsActing);
-            await TeleportToRandomPosition();
-            cts.Token.ThrowIfCancellationRequested();
-            await UniTask.Delay(postAttackDelay);
-            cts.Token.ThrowIfCancellationRequested();
-            callback?.Invoke(true);
-        }
-        catch (OperationCanceledException)
-        {
-            // 취소 시 IsActing 이 true 로 남으면 이후 모든 패턴이 Failure 가 되므로 반드시 해제
-            IsActing = false;
-            if (animator) animator.SetBool(ActingHash, false);
-        }
-    }
-
-    public void OnFireSignal() => fireSignalReceived = true;
-
-    public void OnGroggyPartDestroyed() => groggyPartsDestroyed++;
-
-    async UniTask HitFlash()
-    {
-        if (!spriteRenderer) return;
-        Color baseColor = IsPhase2 ? phase2Color : Color.white;
-        spriteRenderer.color = Color.black;
-        await UniTask.Delay(hitFlashDuration, ignoreTimeScale: true);
-        spriteRenderer.color = baseColor;
-    }
-
-    async UniTask DeathEffect()
-    {
-        int token = TimeControl.Claim(0f);
-        await UniTask.Delay(deathStopDuration, ignoreTimeScale: true);
-        if (!TimeControl.IsOwner(token)) { OnDeath(); return; }
-
-        TimeControl.Set(token, deathSlowScale);
-        float elapsed = 0f;
-        while (elapsed < deathSlowDuration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            await UniTask.Yield(PlayerLoopTiming.LastUpdate);
-        }
-
-        TimeControl.Release(token);
-        OnDeath();
-    }
-
-    private int[] ShuffledOrder(int count)
-    {
-        var order = new int[count];
-        for (int i = 0; i < count; i++) order[i] = i;
-        for (int i = count - 1; i > 0; i--)
-        {
-            int j = UnityEngine.Random.Range(0, i + 1);
-            (order[i], order[j]) = (order[j], order[i]);
-        }
-        return order;
-    }
+    public void OnGroggyPartDestroyed() => attacks.OnGroggyPartDestroyed();
 
     private void DestroyIt()        => Destroy(gameObject);
     private void EnableWarning()    => parryWarning.SetActive(true);

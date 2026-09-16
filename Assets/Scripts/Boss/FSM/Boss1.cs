@@ -25,6 +25,11 @@ public class Boss1 : BossController
     [Header("── 패턴 가중치 ──")]
     [SerializeField] private float weightAttack1 = 60f;
     [SerializeField] private float weightRush = 40f;
+    [Tooltip("선택되지 않았을 때 가중치 증가량 (연속으로 안 뽑히는 불운 방지)")]
+    [SerializeField] private float weightIncrement = 10f;
+
+    private float currentWeightAttack1;
+    private float currentWeightRush;
 
     private float periodicTimer;
     [SerializeField] private float stunInterval = 3f;
@@ -90,15 +95,31 @@ public class Boss1 : BossController
         // 둘 다 사거리 밖이면 추격
         if (!canAttack1 && !canRush) return Chase;
 
-        // 사거리 내 후보만 추려서 가중치 선택
-        float total = 0f;
-        if (canAttack1) total += weightAttack1;
-        if (canRush)    total += weightRush;
+        // 한쪽만 사거리 안이면 강제 선택 — 가중치는 건드리지 않는다 (사거리 문제일 뿐 운이 아니므로)
+        if (!canRush) return Attack1;
+        if (!canAttack1) return Rush;
 
+        // 둘 다 가능할 때만 가중치 룰렛. 선택된 쪽은 기본값으로 리셋, 미선택 쪽은 증가시켜
+        // 같은 패턴이 계속 안 뽑히는 불운을 방지한다 (Boss2 WeightedRandomSelector와 동일한 방식)
+        float total = currentWeightAttack1 + currentWeightRush;
         float roll = Random.Range(0f, total);
 
-        if (canAttack1 && roll < weightAttack1) return Attack1;
+        if (roll < currentWeightAttack1)
+        {
+            currentWeightAttack1 = weightAttack1;
+            currentWeightRush += weightIncrement;
+            return Attack1;
+        }
+
+        currentWeightRush = weightRush;
+        currentWeightAttack1 += weightIncrement;
         return Rush;
+    }
+
+    protected override void OnAwake()
+    {
+        currentWeightAttack1 = weightAttack1;
+        currentWeightRush = weightRush;
     }
 
     protected override void InitStates()

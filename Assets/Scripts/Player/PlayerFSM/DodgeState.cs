@@ -6,7 +6,6 @@ public class DodgeState : PlayerState
     private static readonly int DodgeHash = Animator.StringToHash("Dodge");
 
     private readonly PlayerInput playerInput;
-    private readonly float dodgeAttackInterval = 0.2f;
 
     private float dodgeTime;
     private Vector3 dodgeEnd;
@@ -71,7 +70,7 @@ public class DodgeState : PlayerState
 
     public override void Update()
     {
-        if (!dodgeAttacked && dodgeTime < dodgeAttackInterval)
+        if (!dodgeAttacked && dodgeTime < player.Data.DodgeAttackWindow)
         {
             if (playerInput.actions["Attack"].WasPerformedThisFrame())
             {
